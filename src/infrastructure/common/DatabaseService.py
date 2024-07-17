@@ -1,66 +1,69 @@
+import logging
 import os
-from contextlib import contextmanager
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.engine import Engine
 from typing import Optional
 
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+from sqlalchemy.orm import sessionmaker
+
 from src.common.exception.ExceptionFactory import ExceptionFactory
+from src.common.utils.MessageFactory import MessageFactory
 from src.infrastructure.common.enums.InfrastructureException import InfrastructureException
+from src.infrastructure.common.enums.InfrastructureMessage import InfrastructureMessage
 
 
 class DatabaseService:
 
-    __databaseUrl: str = None
-    __engine: Engine = None
-    __sessionLocal: sessionmaker = None
+    DATABASE_URL: str = os.getenv("DATABASE_URL")
 
-    def __init__(self) -> None:
-        self.__databaseUrl = self.__getDatabaseUrl()
+    __engine: Engine = None
+    __sessionMaker: sessionmaker = None
+    __session: Optional[Session] = None
+
+    def __init__(self):
         self.__engine = self.__createEngine()
-        self.__sessionLocal = self.__createSessionLocal()
+        self.__sessionMaker = self.__createSessionMaker()
 
     def __createEngine(self) -> Engine:
-        return create_engine(
-            self.__databaseUrl,
-            pool_size=5,
-            max_overflow=10,
-            pool_pre_ping=True
-        )
+        return create_engine(self.DATABASE_URL)
 
-    def __createSessionLocal(self) -> sessionmaker:
-        return sessionmaker(
-            autocommit=False,
-            autoflush=False,
-            bind=self.__engine
-        )
+    def __createSessionMaker(self) -> sessionmaker:
+        return sessionmaker(autocommit=False, autoflush=False, bind=self.__engine)
 
-    @contextmanager
-    def generateDbSession(self):
-        session = self.__sessionLocal()
+    def getSession(self) -> Session:
+        if self.__session is None:
+            self.__session = self.__sessionMaker()
+        return self.__session
+
+    def closeSession(self) -> None:
+        if self.__session is not None:
+            self.__session.close()
+            self.__session = None
+
+    def commitSession(self) -> None:
+        if self.__session is not None:
+            self.__session.commit()
+
+    def rollbackSession(self) -> None:
+        if self.__session is not None:
+            self.__session.rollback()
+
+    def checkConnection(self) -> bool:
         try:
-            yield session
-            session.commit()
-        except:
-            session.rollback()
-            raise
-        finally:
-            session.close()
+            with self.getSession() as session:
+                session.execute(text("SELECT 1"))
+            print(MessageFactory
+                  .type(InfrastructureMessage.SUCCESS_CONNECTION_DB)
+                  .getMessage())
 
-    def testConnection(self) -> bool:
-        try:
-            with self.__engine.connect() as connection:
-                connection.execute(text("SELECT 1"))
             return True
-        except SQLAlchemyError as ex:
-            print(f"Error de conexión: {str(ex)}")
+
+        except SQLAlchemyError:
+            logging.error(ExceptionFactory
+                          .type(InfrastructureException.ERROR_CONNECTION_DB)
+                          .getMessage(), exc_info=True)
             return False
-
-    @staticmethod
-    def __getDatabaseUrl() -> str:
-        databaseUrl: Optional[str] = os.getenv("DATABASE_URL")
-
-        if databaseUrl is None:
-            raise ExceptionFactory.type(InfrastructureException.ENV_DB_NOT_SET).getMessage()
-        return databaseUrl
+        finally:
+            self.closeSession()
