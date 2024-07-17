@@ -1,13 +1,13 @@
 import os
-
+from contextlib import contextmanager
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.engine import Engine
-from typing import Generator, Optional
+from typing import Optional
 
-from common.exception.ExceptionFactory import ExceptionFactory
-from src.infrastructure.common.InfrastructureException import InfrastructureException
+from src.common.exception.ExceptionFactory import ExceptionFactory
+from src.infrastructure.common.enums.InfrastructureException import InfrastructureException
 
 
 class DatabaseService:
@@ -36,12 +36,17 @@ class DatabaseService:
             bind=self.__engine
         )
 
-    def generateDbSession(self) -> Generator[Session, None, None]:
-        db = self.__sessionLocal()
+    @contextmanager
+    def generateDbSession(self):
+        session = self.__sessionLocal()
         try:
-            yield db
+            yield session
+            session.commit()
+        except:
+            session.rollback()
+            raise
         finally:
-            db.close()
+            session.close()
 
     def testConnection(self) -> bool:
         try:

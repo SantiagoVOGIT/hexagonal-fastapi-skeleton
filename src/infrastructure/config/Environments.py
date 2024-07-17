@@ -1,4 +1,4 @@
-from common.decorators.UtilityClass import utilityClass
+from src.common.decorators.UtilityClass import utilityClass
 
 
 @utilityClass
