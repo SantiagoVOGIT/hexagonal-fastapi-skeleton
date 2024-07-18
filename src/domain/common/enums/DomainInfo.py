@@ -1,7 +1,6 @@
 from enum import Enum
 
 
-class DomainMessage(Enum):
+class DomainInfo(Enum):
 
     EXAMPLE: str = "Example"
-

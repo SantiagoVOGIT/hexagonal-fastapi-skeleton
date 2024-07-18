@@ -1,7 +1,7 @@
 from enum import Enum
 
 
-class ApplicationException(Enum):
+class DomainError(Enum):
 
     EXAMPLE = "Example"
 
